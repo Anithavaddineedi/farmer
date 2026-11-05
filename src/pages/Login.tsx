@@ -1,107 +1,113 @@
 import { useState } from 'react';
-import { LogIn, UserPlus, Mail, Lock, User, Phone, Eye, EyeOff, Leaf, CheckCircle2, ArrowRight } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User, Phone, Eye, EyeOff, Leaf, Info, ArrowRight } from 'lucide-react';
 import type { PageId } from '@/components/navigation';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 type LoginProps = { onNavigate: (page: PageId) => void };
+type DemoAccount = { fullName: string; phone: string; passwordHash: string };
+const accountsStorageKey = 'agriconnect-demo-accounts';
+
+function readDemoAccounts(): Record<string, DemoAccount> {
+  const savedAccounts = localStorage.getItem(accountsStorageKey);
+  if (!savedAccounts) return {};
+
+  const parsed: unknown = JSON.parse(savedAccounts);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Saved demo accounts are invalid. Clear this site’s local storage and try again.');
+  }
+
+  const accounts: Record<string, DemoAccount> = {};
+  for (const [email, value] of Object.entries(parsed)) {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      !('fullName' in value) ||
+      typeof value.fullName !== 'string' ||
+      !('phone' in value) ||
+      typeof value.phone !== 'string' ||
+      !('passwordHash' in value) ||
+      typeof value.passwordHash !== 'string'
+    ) {
+      throw new Error('Saved demo accounts are invalid. Clear this site’s local storage and try again.');
+    }
+    accounts[email] = { fullName: value.fullName, phone: value.phone, passwordHash: value.passwordHash };
+  }
+  return accounts;
+}
+
+async function hashPassword(password: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('Password hashing is unavailable in this browser. Open the app on localhost or HTTPS.');
+  }
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 export default function Login({ onNavigate }: LoginProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [isResettingPassword, setIsResettingPassword] = useState(() => window.location.hash.includes('type=recovery'));
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setNotice('');
 
-    if (!isSupabaseConfigured || !supabase) {
-      setError('Supabase is not configured. Add the project URL and anon key to .env.local, then restart the app.');
-      return;
-    }
-
-    if ((mode === 'register' || isResettingPassword) && password !== confirmPassword) {
+    if (mode === 'register' && password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
 
-    setLoading(true);
     try {
-      if (isResettingPassword) {
-        const { error: authError } = await supabase.auth.updateUser({ password });
-        if (authError) throw authError;
-        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-        onNavigate('dashboard');
-        return;
-      }
+      const normalizedEmail = email.trim().toLowerCase();
+      const accounts = readDemoAccounts();
+      const passwordHash = await hashPassword(password);
 
-      if (mode === 'login') {
-        const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-        if (authError) throw authError;
-        onNavigate('dashboard');
-        return;
-      }
+      if (mode === 'register') {
+        if (accounts[normalizedEmail]) {
+          setError('An account with this email already exists. Please log in instead.');
+          return;
+        }
 
-      const { data, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: fullName, phone },
-        },
-      });
-      if (authError) throw authError;
-
-      if (data.session) {
-        onNavigate('dashboard');
+        accounts[normalizedEmail] = { fullName: fullName.trim(), phone: phone.trim(), passwordHash };
+        localStorage.setItem(accountsStorageKey, JSON.stringify(accounts));
+        setNotice('Demo account created. Opening your dashboard...');
       } else {
-        setNotice('Account created. Check your email to confirm your account, then log in.');
+        const account = accounts[normalizedEmail];
+        if (!account || account.passwordHash !== passwordHash) {
+          setError('Email or password is incorrect. Register first if you do not have a demo account.');
+          return;
+        }
+        setNotice(`Welcome back, ${account.fullName || normalizedEmail}. Opening your dashboard...`);
       }
+
+      setPassword('');
+      setConfirmPassword('');
+      window.setTimeout(() => onNavigate('dashboard'), 700);
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : 'Authentication failed. Please try again.');
-    } finally {
-      setLoading(false);
+      setError(authError instanceof Error ? authError.message : 'Could not complete the demo login. Please try again.');
     }
   };
 
-  const handlePasswordReset = async () => {
-    setError('');
+  const changeMode = (nextMode: 'login' | 'register') => {
+    setMode(nextMode);
     setNotice('');
-    if (!isSupabaseConfigured || !supabase) {
-      setError('Supabase is not configured. Add the project URL and anon key to .env.local, then restart the app.');
-      return;
-    }
-    if (!email) {
-      setError('Enter your email address first to reset your password.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
-      });
-      if (authError) throw authError;
-      setNotice('If an account exists for this email, a password reset link has been sent.');
-    } catch (authError) {
-      setError(authError instanceof Error ? authError.message : 'Could not send the password reset email.');
-    } finally {
-      setLoading(false);
-    }
+    setError('');
+    setPassword('');
+    setConfirmPassword('');
+    setFullName('');
+    setPhone('');
   };
 
   return (
     <div className="animate-fade-in min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-agri-500 to-agri-700 flex items-center justify-center mx-auto mb-3 shadow-lg">
             <Leaf className="w-7 h-7 text-white" strokeWidth={2.5} />
@@ -111,10 +117,9 @@ export default function Login({ onNavigate }: LoginProps) {
         </div>
 
         {notice && (
-          <div className="bg-agri-50 border border-agri-200 rounded-2xl p-6 text-center mb-4 animate-slide-up">
-            <CheckCircle2 className="w-12 h-12 text-agri-600 mx-auto mb-3" />
-            <h2 className="text-lg font-display font-bold text-gray-900 mb-1">Check your email</h2>
-            <p className="text-sm text-gray-500">{notice}</p>
+          <div role="status" className="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-4 flex gap-3 text-sm text-sky-800">
+            <Info className="w-5 h-5 shrink-0" />
+            <p>{notice}</p>
           </div>
         )}
         {error && (
@@ -124,16 +129,17 @@ export default function Login({ onNavigate }: LoginProps) {
         )}
 
         <div className="bg-white rounded-2xl shadow-card p-7">
-          {/* Tabs */}
           <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-6">
             <button
-              onClick={() => setMode('login')}
+              type="button"
+              onClick={() => changeMode('login')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'login' ? 'bg-white text-agri-700 shadow-sm' : 'text-gray-500'}`}
             >
               <LogIn className="w-4 h-4" /> Login
             </button>
             <button
-              onClick={() => setMode('register')}
+              type="button"
+              onClick={() => changeMode('register')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'register' ? 'bg-white text-agri-700 shadow-sm' : 'text-gray-500'}`}
             >
               <UserPlus className="w-4 h-4" /> Register
@@ -141,113 +147,82 @@ export default function Login({ onNavigate }: LoginProps) {
           </div>
 
           <h2 className="text-xl font-display font-bold text-gray-900 mb-1">
-            {isResettingPassword ? 'Set a new password' : mode === 'login' ? 'Welcome back!' : 'Create your account'}
+            {mode === 'login' ? 'Welcome back!' : 'Create your account'}
           </h2>
           <p className="text-sm text-gray-400 mb-6">
-            {isResettingPassword ? 'Choose a new password for your account.' : mode === 'login' ? 'Enter your credentials to access your dashboard.' : 'Join AgriConnect to access all farmer services.'}
+            {mode === 'login' ? 'Log in with a demo account saved in this browser.' : 'Create a demo account stored only in this browser.'}
           </p>
 
-          {!isSupabaseConfigured && (
-            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
-              Supabase setup is required before you can log in or register.
-            </p>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isResettingPassword && mode === 'register' && (
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Ramesh Patil" className="input-field !pl-11" />
+            {mode === 'register' && (
+              <>
+                <div>
+                  <label htmlFor="full-name" className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input id="full-name" type="text" required value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Ramesh Patil" className="input-field !pl-11" />
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {!isResettingPassword && <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="farmer@example.com" className="input-field !pl-11" />
-              </div>
-            </div>}
-
-            {!isResettingPassword && mode === 'register' && (
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input type="tel" required value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 98765 43210" className="input-field !pl-11" />
+                <div>
+                  <label htmlFor="phone" className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input id="phone" type="tel" required value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 98765 43210" className="input-field !pl-11" />
+                  </div>
                 </div>
-              </div>
+              </>
             )}
 
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">{isResettingPassword ? 'New Password' : 'Password'}</label>
+              <label htmlFor="email" className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="farmer@example.com" className="input-field !pl-11" />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input type={showPassword ? 'text' : 'password'} required minLength={6} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="input-field !pl-11 !pr-11" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <input id="password" type={showPassword ? 'text' : 'password'} required minLength={6} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="input-field !pl-11 !pr-11" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" aria-label={showPassword ? 'Hide password' : 'Show password'}>
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            {(mode === 'register' || isResettingPassword) && (
+            {mode === 'register' && (
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">{isResettingPassword ? 'Confirm New Password' : 'Confirm Password'}</label>
+                <label htmlFor="confirm-password" className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Confirm Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input type={showConfirm ? 'text' : 'password'} required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" className="input-field !pl-11 !pr-11" />
-                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <input id="confirm-password" type={showConfirm ? 'text' : 'password'} required minLength={6} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" className="input-field !pl-11 !pr-11" />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}>
                     {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
             )}
 
-            {!isResettingPassword && mode === 'login' && (
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 text-gray-500 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded text-agri-600 focus:ring-agri-500" />
-                  Remember me
-                </label>
-                <button type="button" onClick={handlePasswordReset} disabled={loading} className="text-agri-600 font-medium hover:text-agri-700 disabled:opacity-50">Forgot password?</button>
-              </div>
-            )}
-
-            <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed">
-              {loading ? 'Please wait...' : isResettingPassword ? 'Update Password' : mode === 'login' ? 'Login' : 'Create Account'}
+            <button type="submit" className="btn-primary w-full">
+              {mode === 'login' ? 'Login' : 'Create Account'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {isResettingPassword && (
-            <div className="text-center mt-5">
-              <button
-                onClick={() => {
-                  setIsResettingPassword(false);
-                  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-                }}
-                className="text-agri-600 font-semibold hover:text-agri-700"
-              >
-                Back to login
-              </button>
-            </div>
-          )}
-
-          {!isResettingPassword && <div className="text-center mt-5">
+          <div className="text-center mt-5">
             <p className="text-sm text-gray-400">
               {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-              <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} className="text-agri-600 font-semibold hover:text-agri-700">
+              <button type="button" onClick={() => changeMode(mode === 'login' ? 'register' : 'login')} className="text-agri-600 font-semibold hover:text-agri-700">
                 {mode === 'login' ? 'Register here' : 'Login here'}
               </button>
             </p>
-          </div>}
+          </div>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          By continuing, you agree to AgriConnect's Terms of Service and Privacy Policy.
+          Demo mode only: accounts are saved in this browser and are not secure authentication.
         </p>
       </div>
     </div>
