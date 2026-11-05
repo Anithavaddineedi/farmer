@@ -1,9 +1,15 @@
 import { useState, useMemo } from 'react';
 import { Search, Sprout, Calendar, Droplets, Thermometer, Ruler, TrendingUp, X } from 'lucide-react';
-import { crops, type Crop } from '@/data/demoData';
+import { crops, images, type Crop } from '@/data/demoData';
 
 const categories: ('All' | Crop['category'])[] = ['All', 'Cereal', 'Vegetable', 'Fruit', 'Pulse', 'Oilseed', 'Cash Crop'];
 const seasons: ('All' | Crop['season'])[] = ['All', 'Kharif', 'Rabi', 'Zaid', 'All Season'];
+const seasonImages: Partial<Record<Crop['season'], string>> = {
+  Kharif: images.ricePaddy,
+  Rabi: images.wheatField,
+  Zaid: images.tomatoes,
+  'All Season': images.bananas,
+};
 
 export default function CropInfo() {
   const [search, setSearch] = useState('');
@@ -74,10 +80,13 @@ export default function CropInfo() {
                   <button
                     key={s}
                     onClick={() => setSeason(s)}
-                    className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all inline-flex items-center gap-2 ${
                       season === s ? 'bg-agri-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
+                    {s !== 'All' && seasonImages[s] && (
+                      <img src={seasonImages[s]} alt="" aria-hidden="true" className="w-7 h-7 rounded-md object-cover" />
+                    )}
                     {s}
                   </button>
                 ))}

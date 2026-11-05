@@ -24,7 +24,7 @@ export default function MarketPrices() {
 
   const reset = () => { setSearch(''); setState('All'); setTrend('All'); setSortBy('price'); };
 
-  const trendIcon = (t: string, change: number) => {
+  const trendIcon = (t: string) => {
     if (t === 'up') return <TrendingUp className="w-4 h-4 text-agri-600" />;
     if (t === 'down') return <TrendingDown className="w-4 h-4 text-red-500" />;
     return <Minus className="w-4 h-4 text-gray-400" />;
@@ -118,7 +118,7 @@ export default function MarketPrices() {
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
                       p.trend === 'up' ? 'bg-agri-100 text-agri-700' : p.trend === 'down' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
                     }`}>
-                      {trendIcon(p.trend, p.change)}
+                      {trendIcon(p.trend)}
                       {p.change > 0 ? '+' : ''}{p.change}%
                     </div>
                   </td>
@@ -140,7 +140,7 @@ export default function MarketPrices() {
                 </div>
                 <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold ${
                   p.trend === 'up' ? 'bg-agri-100 text-agri-700' : p.trend === 'down' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
-                }`}>{trendIcon(p.trend, p.change)}{p.change > 0 ? '+' : ''}{p.change}%</div>
+                }`}>{trendIcon(p.trend)}{p.change > 0 ? '+' : ''}{p.change}%</div>
               </div>
               <div className="flex items-end justify-between">
                 <span className="text-xl font-display font-bold text-agri-700">₹{p.price.toLocaleString()}<span className="text-xs text-gray-400 font-normal ml-1">{p.unit}</span></span>

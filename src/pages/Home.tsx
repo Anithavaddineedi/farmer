@@ -1,6 +1,6 @@
 import { Sprout, TrendingUp, Cloud, Landmark, MessageCircleQuestion, Users, ArrowRight, Droplets, Sun, Wheat, ShieldCheck, Award, Quote } from 'lucide-react';
 import { images } from '@/data/demoData';
-import type { PageId } from '@/components/Navbar';
+import type { PageId } from '@/components/navigation';
 
 type HomeProps = { onNavigate: (page: PageId) => void };
 

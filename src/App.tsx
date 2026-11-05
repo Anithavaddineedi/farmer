@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import Navbar, { type PageId } from '@/components/Navbar';
+import Navbar from '@/components/Navbar';
+import type { PageId } from '@/components/navigation';
 import Footer from '@/components/Footer';
 import Home from '@/pages/Home';
 import Dashboard from '@/pages/Dashboard';
@@ -12,7 +13,9 @@ import Community from '@/pages/Community';
 import Login from '@/pages/Login';
 
 function App() {
-  const [page, setPage] = useState<PageId>('home');
+  const [page, setPage] = useState<PageId>(() =>
+    window.location.hash.includes('type=recovery') ? 'login' : 'home'
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleNavigate = (next: PageId) => {

@@ -1,5 +1,5 @@
 import { Leaf, Phone, Mail, MapPin, Facebook, Twitter, Instagram, Youtube, ArrowRight } from 'lucide-react';
-import { navItems, type PageId } from './Navbar';
+import { navItems, type PageId } from './navigation';
 
 type FooterProps = {
   onNavigate: (page: PageId) => void;

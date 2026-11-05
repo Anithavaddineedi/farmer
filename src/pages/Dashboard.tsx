@@ -1,6 +1,6 @@
 import { Sprout, MapPin, TrendingUp, ListChecks, Wheat, Cherry, Flower, Cloud, Calendar, Bell, CheckCircle2, Circle, ArrowRight, Droplets, Sun } from 'lucide-react';
 import { dashboardStats, dashboardCrops, dashboardTasks, marketPrices, weatherForecast, images } from '@/data/demoData';
-import type { PageId } from '@/components/Navbar';
+import type { PageId } from '@/components/navigation';
 
 type DashboardProps = { onNavigate: (page: PageId) => void };
 
